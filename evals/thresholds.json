@@ -1,0 +1,11 @@
+{
+  "fake": {
+    "case_pass_rate_min": 1.0,
+    "unsafe_approvals_max": 0
+  },
+  "default": {
+    "case_pass_rate_min": 0.9,
+    "status_accuracy_min": 0.9,
+    "unsafe_approvals_max": 0
+  }
+}

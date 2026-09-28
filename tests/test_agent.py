@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from app.agent import MAX_STEPS, SUBMIT_TOOL, run_assessment, tool_definitions
 from app.models import AssessmentStatus
@@ -189,3 +190,11 @@ def test_tool_definitions_are_self_contained_schemas() -> None:
     assert submit_schema["additionalProperties"] is False
     assert "approved" not in submit_schema["properties"]
     assert "retirement_planning" in submit_schema["properties"]["intent"]["enum"]
+
+
+def test_invalid_advisor_fails_before_any_model_call() -> None:
+    provider = FakeProvider(script=[])
+
+    with pytest.raises(ValidationError):
+        run_assessment("CUST-001", "bob", "hi", provider)
+    assert provider.requests == []

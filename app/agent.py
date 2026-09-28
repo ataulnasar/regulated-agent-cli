@@ -19,13 +19,14 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from pydantic_core import to_json
 
 from app.audit import append_event
 from app.data import load_products
 from app.guardrails import evaluate, status_for
 from app.models import (
+    AdvisorId,
     AgentRecommendation,
     AssessmentMetrics,
     CustomerProfile,
@@ -76,8 +77,9 @@ def run_assessment(
     customer_id: str, advisor_id: str, request: str, provider: ModelProvider
 ) -> FinalAssessment:
     """Run one assessment end to end and write it to the audit trail."""
-    # Fail fast on an unknown customer, before spending a model call.
+    # Fail fast on bad input, before spending a model call.
     profile = load_customer_profile(customer_id)
+    TypeAdapter(AdvisorId).validate_python(advisor_id)
     trace_id = uuid4().hex[:12]
     token = trace_id_var.set(trace_id)
     try:
