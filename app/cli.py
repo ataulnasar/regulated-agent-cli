@@ -4,8 +4,11 @@ Usage:
     python -m app.cli assess --customer CUST-001 --advisor ADV-01 \
         --request "I want a low-risk investment for retirement"
     python -m app.cli review <assessment-id> --reviewer ADV-02
+    python -m app.cli verify-audit
 """
 
+import logging
+import os
 from enum import StrEnum
 from typing import Annotated, NoReturn
 
@@ -13,8 +16,10 @@ import typer
 from rich.console import Console
 
 from app.agent import run_assessment
+from app.audit import verify_chain
 from app.display import render_assessment, render_decision
 from app.models import AssessmentStatus, FinalAssessment, ReviewDecision
+from app.observability import setup_logging
 from app.providers import PROVIDERS, get_provider
 from app.review import apply_decision, load_pending, save_pending
 from app.tools import DomainError
@@ -41,8 +46,12 @@ DecisionOption = Annotated[
 
 
 @app.callback()
-def main() -> None:
-    """Keep `assess` as an explicit subcommand as more commands are added."""
+def main(
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Write structured JSON logs to stderr.")
+    ] = False,
+) -> None:
+    setup_logging(logging.INFO if verbose else os.environ.get("LOG_LEVEL", "WARNING").upper())
 
 
 @app.command()
@@ -93,6 +102,19 @@ def review(
         _fail(exc)
     render_assessment(console, assessment)
     _review(console, assessment, reviewer or typer.prompt("Reviewer ID"), auto_decision)
+
+
+@app.command("verify-audit")
+def verify_audit() -> None:
+    """Check that the audit log's hash chain is intact."""
+    result = verify_chain()
+    if result.ok:
+        typer.echo(f"OK: {result.records} audit records, hash chain intact.")
+        return
+    _fail(
+        f"audit log TAMPERED at line {result.first_bad_line}: {result.problem} "
+        f"({result.records} records verified before it)"
+    )
 
 
 def _review(

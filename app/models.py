@@ -181,6 +181,13 @@ class ComplianceResult(DomainModel):
     rules_triggered: list[str] = Field(default_factory=list)
 
 
+class AssessmentMetrics(DomainModel):
+    model_calls: Annotated[int, Field(ge=0)]
+    input_tokens: Annotated[int, Field(ge=0)]
+    output_tokens: Annotated[int, Field(ge=0)]
+    latency_ms: Annotated[float, Field(ge=0)]
+
+
 class FinalAssessment(DomainModel):
     assessment_id: UUID = Field(default_factory=uuid4)
     trace_id: Annotated[str, StringConstraints(min_length=1)]
@@ -191,6 +198,7 @@ class FinalAssessment(DomainModel):
     recommendation: AgentRecommendation
     compliance: ComplianceResult
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    metrics: AssessmentMetrics | None = None
     status: AssessmentStatus
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     # Set only when a second advisor has decided on a pending_review assessment.

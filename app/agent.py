@@ -14,6 +14,7 @@ context that critiques the draft. The deterministic guardrail would still have t
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -21,10 +22,13 @@ from uuid import uuid4
 from pydantic import ValidationError
 from pydantic_core import to_json
 
+from app.audit import append_event
 from app.data import load_products
 from app.guardrails import evaluate, status_for
 from app.models import (
     AgentRecommendation,
+    AssessmentMetrics,
+    CustomerProfile,
     FinalAssessment,
     Intent,
     PolicySection,
@@ -32,8 +36,9 @@ from app.models import (
     RecommendedAction,
     ToolCall,
 )
+from app.observability import fingerprint, log_event, trace_id_var
 from app.prompts import SYSTEM_PROMPT, format_task
-from app.providers import Block, Message, ModelProvider
+from app.providers import Block, Message, ModelProvider, ModelResponse
 from app.tools import TOOLS, execute_tool, load_customer_profile, tool_schema
 
 logger = logging.getLogger(__name__)
@@ -58,6 +63,9 @@ class _Run:
     recommendation: AgentRecommendation | None = None
     corrections_left: int = MAX_CORRECTIONS
     failure: str | None = None
+    model_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def tool_definitions() -> list[dict[str, Any]]:
@@ -67,14 +75,41 @@ def tool_definitions() -> list[dict[str, Any]]:
 def run_assessment(
     customer_id: str, advisor_id: str, request: str, provider: ModelProvider
 ) -> FinalAssessment:
+    """Run one assessment end to end and write it to the audit trail."""
     # Fail fast on an unknown customer, before spending a model call.
     profile = load_customer_profile(customer_id)
     trace_id = uuid4().hex[:12]
-    run = _Run(messages=[{"role": "user", "content": format_task(customer_id, request)}])
+    token = trace_id_var.set(trace_id)
+    try:
+        return _run(profile, advisor_id, request, provider, trace_id)
+    finally:
+        trace_id_var.reset(token)
+
+
+def _run(
+    profile: CustomerProfile,
+    advisor_id: str,
+    request: str,
+    provider: ModelProvider,
+    trace_id: str,
+) -> FinalAssessment:
+    started = time.perf_counter()
+    log_event(
+        logger,
+        "assessment_started",
+        customer_id=profile.customer_id,
+        advisor_id=advisor_id,
+        provider=provider.name,
+        model_id=provider.model_id,
+        # Never the request text itself: it may contain personal data.
+        request_chars=len(request),
+        request_sha256=fingerprint(request),
+    )
+    run = _Run(messages=[{"role": "user", "content": format_task(profile.customer_id, request)}])
     tools = tool_definitions()
 
-    for _ in range(MAX_STEPS):
-        response = provider.create(SYSTEM_PROMPT, run.messages, tools)
+    for step in range(1, MAX_STEPS + 1):
+        response = _call_model(run, provider, tools, step)
         run.messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason != "tool_use":
@@ -95,24 +130,61 @@ def run_assessment(
         load_products(),
         model_output_invalid=run.recommendation is None,
     )
+    metrics = AssessmentMetrics(
+        model_calls=run.model_calls,
+        input_tokens=run.input_tokens,
+        output_tokens=run.output_tokens,
+        latency_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
     assessment = FinalAssessment(
         trace_id=trace_id,
-        customer_id=customer_id,
+        customer_id=profile.customer_id,
         advisor_id=advisor_id,
         model=f"{provider.name}/{provider.model_id}",
         request=request,
         recommendation=recommendation,
         compliance=compliance,
         tool_calls=run.tool_calls,
+        metrics=metrics,
         status=status_for(recommendation, compliance),
     )
-    logger.info(
-        "assessment trace_id=%s status=%s rules=%s",
-        trace_id,
-        assessment.status,
-        compliance.rules_triggered,
+    log_event(
+        logger,
+        "assessment_completed",
+        assessment_id=str(assessment.assessment_id),
+        status=assessment.status,
+        allowed=compliance.allowed,
+        requires_human_review=compliance.requires_human_review,
+        rules_triggered=compliance.rules_triggered,
+        citations=recommendation.citations,
+        fallback_reason=run.failure,
+        **metrics.model_dump(),
     )
+    append_event("assessment_created", assessment, actor="system")
     return assessment
+
+
+def _call_model(
+    run: _Run, provider: ModelProvider, tools: list[dict[str, Any]], step: int
+) -> ModelResponse:
+    started = time.perf_counter()
+    response = provider.create(SYSTEM_PROMPT, run.messages, tools)
+    run.model_calls += 1
+    run.input_tokens += response.input_tokens
+    run.output_tokens += response.output_tokens
+    log_event(
+        logger,
+        "model_call",
+        step=step,
+        provider=provider.name,
+        model_id=provider.model_id,
+        stop_reason=response.stop_reason,
+        tool_uses=[b["name"] for b in response.tool_uses()],
+        input_tokens=response.input_tokens,
+        output_tokens=response.output_tokens,
+        latency_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return response
 
 
 def _handle_tool_use(run: _Run, block: Block) -> Block:
@@ -171,7 +243,7 @@ def _citations_in(result: Any) -> set[str]:
 
 
 def _fallback(reason: str) -> AgentRecommendation:
-    logger.warning("using fallback recommendation: %s", reason)
+    log_event(logger, "fallback_recommendation", logging.WARNING, reason=reason)
     return AgentRecommendation(
         intent=Intent.UNKNOWN,
         recommended_action=RecommendedAction.ADVISOR_REVIEW,

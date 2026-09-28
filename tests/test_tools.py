@@ -119,7 +119,9 @@ def test_execute_tool_success_records_call(caplog: pytest.LogCaptureFixture) -> 
     assert call.success
     assert call.duration_ms >= 0
     assert "CUST-002" in call.result_summary
-    assert "tool_call name=get_customer_profile success=True" in caplog.text
+    record = next(r for r in caplog.records if r.getMessage() == "tool_call")
+    assert record.fields["tool"] == "get_customer_profile"
+    assert record.fields["success"] is True
 
 
 def test_execute_tool_summaries_contain_no_names() -> None:

@@ -8,6 +8,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.audit import append_event
 from app.data import DATA_DIR
 from app.models import AssessmentStatus, FinalAssessment, ReviewDecision
 from app.tools import DomainError
@@ -68,5 +69,6 @@ def apply_decision(
             "review_decision": decision,
         }
     )
+    append_event("human_decision", decided, actor=reviewer_id)
     _path(str(assessment.assessment_id)).unlink(missing_ok=True)
     return decided

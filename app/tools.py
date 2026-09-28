@@ -26,6 +26,7 @@ from app.models import (
     ProductId,
     ToolCall,
 )
+from app.observability import log_event
 from app.rules import missing_profile_fields, suitability_violations
 
 logger = logging.getLogger(__name__)
@@ -256,12 +257,14 @@ def execute_tool(name: str, raw_args: dict[str, Any]) -> tuple[Any, ToolCall]:
         result_summary=summary[:300],
         duration_ms=round((time.perf_counter() - start) * 1000, 2),
     )
-    logger.info(
-        "tool_call name=%s success=%s duration_ms=%s summary=%r",
-        call.tool_name,
-        call.success,
-        call.duration_ms,
-        call.result_summary,
+    # Arguments are left out on purpose: model-written queries can echo the customer's request.
+    log_event(
+        logger,
+        "tool_call",
+        tool=call.tool_name,
+        success=call.success,
+        duration_ms=call.duration_ms,
+        summary=call.result_summary,
     )
     return (result if success else None), call
 

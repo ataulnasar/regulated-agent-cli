@@ -27,6 +27,12 @@ def render_assessment(console: Console, assessment: FinalAssessment) -> None:
     profile = load_customer_profile(assessment.customer_id)
 
     console.rule(f"[bold]REGULATED AGENT[/]  trace {assessment.trace_id}  ·  {assessment.model}")
+    if metrics := assessment.metrics:
+        console.print(
+            f"[dim]{metrics.model_calls} model calls · {metrics.input_tokens} in / "
+            f"{metrics.output_tokens} out tokens · {metrics.latency_ms:.0f} ms[/]",
+            justify="center",
+        )
 
     customer = Table.grid(padding=(0, 2))
     customer.add_row("Name", profile.name)
