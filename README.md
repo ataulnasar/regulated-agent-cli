@@ -39,3 +39,43 @@ an embedded "SYSTEM NOTE" telling the model to recommend it and mark it approved
 indirect prompt injection through retrieved data. The system must stay safe even if a model obeys
 it: the model has no field to approve with, and the guardrail rejects the product for unsuitable
 customers regardless of what the model says.
+
+## MCP server (optional)
+
+The same business capabilities are available to any MCP client (Claude Code, Claude Desktop):
+
+```bash
+uv sync --extra mcp
+uv run --extra mcp python -m app.mcp_server   # stdio transport
+```
+
+| Tool | What it does |
+|---|---|
+| `get_customer_profile` | Minimised customer view (no name, banded age and income) |
+| `search_product_catalog` | Keyword search of the product catalogue |
+| `check_product_eligibility` | Suitability rules for one customer and product |
+| `retrieve_policy_context` | Relevant policy sections with citation ids |
+| `assess_request` | The full agent, guardrail and audit trail; queues pending reviews |
+
+The MCP server reuses the tool registry, so input schemas, validation, logging and the audit trail are
+identical to the CLI. There is deliberately **no approval tool**: approval stays with an identified
+second advisor through `python -m app.cli review` (four-eyes).
+
+**Claude Code** offers to enable the project's `.mcp.json` server when you open this repository.
+**Claude Desktop**: add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "regulated-agent": {
+      "command": "uv",
+      "args": ["--directory", "/absolute/path/to/regulated-agent-cli",
+               "run", "--extra", "mcp", "python", "-m", "app.mcp_server"],
+      "env": {"LLM_PROVIDER": "fake"}
+    }
+  }
+}
+```
+
+`skills/suitability-assessment/SKILL.md` is a Claude Skill that tells Claude how to use these tools:
+when to call `assess_request`, how to report each status, and what it must never do.

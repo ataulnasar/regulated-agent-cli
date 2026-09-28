@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "regulated-agent": {
+      "command": "uv",
+      "args": ["run", "--extra", "mcp", "python", "-m", "app.mcp_server"],
+      "env": {"LLM_PROVIDER": "fake"}
+    }
+  }
+}
