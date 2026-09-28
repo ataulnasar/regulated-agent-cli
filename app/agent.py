@@ -38,7 +38,7 @@ from app.models import (
     ToolCall,
 )
 from app.observability import fingerprint, log_event, trace_id_var
-from app.prompts import SYSTEM_PROMPT, format_task
+from app.prompts import SYSTEM_PROMPT, format_task, suspected_injection, wrap_tool_output
 from app.providers import Block, Message, ModelProvider, ModelResponse
 from app.tools import TOOLS, execute_tool, load_customer_profile, tool_schema
 
@@ -107,6 +107,8 @@ def _run(
         request_chars=len(request),
         request_sha256=fingerprint(request),
     )
+    if suspected_injection(request):
+        log_event(logger, "suspected_prompt_injection", logging.WARNING, source="request")
     run = _Run(messages=[{"role": "user", "content": format_task(profile.customer_id, request)}])
     tools = tool_definitions()
 
@@ -199,7 +201,10 @@ def _handle_tool_use(run: _Run, block: Block) -> Block:
     if not call.success:
         return _tool_result(block, call.result_summary, is_error=True)
     run.retrieved_citations |= _citations_in(result)
-    return _tool_result(block, to_json(result).decode())
+    output = to_json(result).decode()
+    if suspected_injection(output):
+        log_event(logger, "suspected_prompt_injection", logging.WARNING, source=block["name"])
+    return _tool_result(block, wrap_tool_output(block["name"], output))
 
 
 def _handle_submission(run: _Run, block: Block) -> Block:

@@ -13,7 +13,7 @@ Fake-provider runs test the harness and the guardrails, not model quality. Real-
 import json
 from typing import Any
 
-from app.prompts import parse_task
+from app.prompts import parse_task, unwrap_tool_output
 from app.providers import Block, Message, ModelResponse
 
 # A scripted turn is a list of steps: {"text": "..."} or {"tool": "<name>", "input": {...}}.
@@ -160,6 +160,6 @@ def _tool_results(messages: list[Message]) -> dict[str, list[Any]]:
 
 def _parse(content: Any) -> Any:
     try:
-        return json.loads(content) if isinstance(content, str) else content
+        return json.loads(unwrap_tool_output(content)) if isinstance(content, str) else content
     except json.JSONDecodeError:
         return None
