@@ -186,6 +186,7 @@ class FinalAssessment(DomainModel):
     trace_id: Annotated[str, StringConstraints(min_length=1)]
     customer_id: CustomerId
     advisor_id: AdvisorId
+    model: Annotated[str, StringConstraints(min_length=1)]  # "<provider>/<model_id>"
     request: Annotated[str, StringConstraints(min_length=1, max_length=2000)]
     recommendation: AgentRecommendation
     compliance: ComplianceResult

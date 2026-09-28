@@ -178,6 +178,7 @@ def test_final_assessment_defaults() -> None:
         trace_id="abc123",
         customer_id="CUST-001",
         advisor_id="ADV-01",
+        model="fake/fake-heuristic",
         request="I want a low-risk investment for retirement",
         recommendation=make_recommendation(),
         compliance=ComplianceResult(

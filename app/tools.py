@@ -148,8 +148,26 @@ class ToolSpec:
         return {
             "name": self.name,
             "description": self.description,
-            "input_schema": self.input_model.model_json_schema(),
+            "input_schema": tool_schema(self.input_model),
         }
+
+
+def tool_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """JSON schema for a tool input: $refs inlined, internal docstring and titles removed."""
+    schema = model.model_json_schema()
+    defs = schema.pop("$defs", {})
+
+    def resolve(node: Any) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return resolve(defs[node["$ref"].rsplit("/", 1)[-1]])
+            return {k: resolve(v) for k, v in node.items() if k != "title"}
+        if isinstance(node, list):
+            return [resolve(item) for item in node]
+        return node
+
+    schema.pop("description", None)
+    return resolve(schema)
 
 
 def _summarise_customer(view: ModelCustomerView) -> str:
