@@ -106,3 +106,7 @@ def all_citation_ids() -> set[str]:
     policy = {s.citation for s in _index().sections}
     products = {p.source_id for p in load_products().values()}
     return policy | products
+
+
+def policy_sections() -> list[PolicySection]:
+    return list(_index().sections)

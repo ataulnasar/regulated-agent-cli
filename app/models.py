@@ -193,3 +193,12 @@ class FinalAssessment(DomainModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     status: AssessmentStatus
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Set only when a second advisor has decided on a pending_review assessment.
+    reviewed_by: AdvisorId | None = None
+    reviewed_at: AwareDatetime | None = None
+    review_decision: ReviewDecision | None = None
+
+    @property
+    def released(self) -> bool:
+        """Whether the recommendation may be presented to the customer."""
+        return self.status in (AssessmentStatus.AUTO_APPROVED, AssessmentStatus.APPROVED_BY_HUMAN)

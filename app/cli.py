@@ -3,20 +3,41 @@
 Usage:
     python -m app.cli assess --customer CUST-001 --advisor ADV-01 \
         --request "I want a low-risk investment for retirement"
+    python -m app.cli review <assessment-id> --reviewer ADV-02
 """
 
-from typing import Annotated
+from enum import StrEnum
+from typing import Annotated, NoReturn
 
 import typer
+from rich.console import Console
 
 from app.agent import run_assessment
+from app.display import render_assessment, render_decision
+from app.models import AssessmentStatus, FinalAssessment, ReviewDecision
 from app.providers import PROVIDERS, get_provider
+from app.review import apply_decision, load_pending, save_pending
 from app.tools import DomainError
 
 app = typer.Typer(
     help="Advisor-facing suitability assistant with deterministic compliance guardrails.",
     no_args_is_help=True,
 )
+
+
+class Decision(StrEnum):
+    approve = "approve"
+    reject = "reject"
+
+
+ReviewerOption = Annotated[
+    str | None,
+    typer.Option(help="ID of the second advisor reviewing (must differ from the requester)."),
+]
+DecisionOption = Annotated[
+    Decision | None,
+    typer.Option(help="Decide without prompting (for demos and CI)."),
+]
 
 
 @app.callback()
@@ -35,29 +56,67 @@ def assess(
             help=f"Model provider: {' | '.join(PROVIDERS)}. Default: $LLM_PROVIDER or fake."
         ),
     ] = None,
+    reviewer: ReviewerOption = None,
+    auto_decision: DecisionOption = None,
 ) -> None:
     """Assess a customer request and draft a compliant recommendation."""
+    console = Console()
     try:
         assessment = run_assessment(customer, advisor, request, get_provider(provider))
     except (DomainError, ValueError) as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _fail(exc)
+    render_assessment(console, assessment)
 
-    rec, compliance = assessment.recommendation, assessment.compliance
-    typer.echo(f"Trace: {assessment.trace_id}  Model: {assessment.model}")
-    typer.echo(f"Customer: {assessment.customer_id}  Advisor: {assessment.advisor_id}")
-    typer.echo(f"Request: {assessment.request}")
-    typer.echo("Tools:")
-    for call in assessment.tool_calls:
-        typer.echo(f"  {'ok ' if call.success else 'ERR'} {call.tool_name}: {call.result_summary}")
-    typer.echo(f"Intent: {rec.intent}")
-    typer.echo(f"Recommendation: {rec.recommended_action} {rec.recommended_product_id or ''}")
-    typer.echo(f"Reasoning: {rec.reasoning_summary}")
-    typer.echo(f"Citations: {', '.join(rec.citations) or 'none'}")
-    typer.echo(f"Rules triggered: {', '.join(compliance.rules_triggered) or 'none'}")
-    for reason in compliance.reasons:
-        typer.echo(f"  - {reason}")
-    typer.echo(f"Status: {assessment.status}")
+    if assessment.status != AssessmentStatus.PENDING_REVIEW:
+        return
+    save_pending(assessment)
+    if reviewer is None:
+        console.print(
+            "\nSaved for review. A second advisor can decide with:\n"
+            f"  python -m app.cli review {assessment.assessment_id} --reviewer <ADV-ID>"
+        )
+        return
+    _review(console, assessment, reviewer, auto_decision)
+
+
+@app.command()
+def review(
+    assessment_id: Annotated[str, typer.Argument(help="ID of a pending assessment.")],
+    reviewer: ReviewerOption = None,
+    auto_decision: DecisionOption = None,
+) -> None:
+    """Approve or reject an assessment that is waiting for human review."""
+    console = Console()
+    try:
+        assessment = load_pending(assessment_id)
+    except DomainError as exc:
+        _fail(exc)
+    render_assessment(console, assessment)
+    _review(console, assessment, reviewer or typer.prompt("Reviewer ID"), auto_decision)
+
+
+def _review(
+    console: Console, assessment: FinalAssessment, reviewer: str, auto_decision: Decision | None
+) -> None:
+    if reviewer == assessment.advisor_id:
+        # Checked before asking, so the requester is never shown an approve prompt.
+        _fail(f"{reviewer} requested this assessment and cannot review it (policies.md#four-eyes)")
+    if auto_decision is None:
+        approved = typer.confirm(f"\n{reviewer}: approve this recommendation?", default=False)
+    else:
+        approved = auto_decision == Decision.approve
+    decision = ReviewDecision.APPROVED if approved else ReviewDecision.REJECTED
+    try:
+        decided = apply_decision(assessment, reviewer, decision)
+    except (DomainError, ValueError) as exc:
+        _fail(exc)
+    console.print()
+    render_decision(console, decided)
+
+
+def _fail(error: object) -> NoReturn:
+    typer.echo(f"Error: {error}", err=True)
+    raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
