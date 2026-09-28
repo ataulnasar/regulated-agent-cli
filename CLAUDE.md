@@ -20,7 +20,11 @@ human must approve it (MiFID II-style suitability assessment).
 - Keep the code small and readable during a live walkthrough. Prefer clarity over abstraction.
 
 ## Commands
-- Install: `uv sync`
+- Install: `uv sync --all-extras`
 - Run: `uv run python -m app.cli assess --customer CUST-001 --advisor ADV-01 --request "..."`
+- Review: `uv run python -m app.cli review <assessment-id> --reviewer ADV-02`
+- Audit: `uv run python -m app.cli verify-audit`
 - Test: `uv run pytest`
-- Lint: `uv run ruff check .`
+- Evals: `uv run python -m evals.run_evals` (add `--provider anthropic` for a real model)
+- Lint: `uv run ruff check . && uv run ruff format --check .`
+- MCP server: `uv run --extra mcp python -m app.mcp_server`
