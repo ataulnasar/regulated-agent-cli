@@ -1,0 +1,42 @@
+[
+  {
+    "customer_id": "CUST-001",
+    "name": "Anna Lindqvist",
+    "age": 58,
+    "risk_tolerance": "low",
+    "investment_horizon_years": 10,
+    "annual_income_sek": 720000
+  },
+  {
+    "customer_id": "CUST-002",
+    "name": "Erik Holmberg",
+    "age": 34,
+    "risk_tolerance": "high",
+    "investment_horizon_years": 20,
+    "annual_income_sek": 910000
+  },
+  {
+    "customer_id": "CUST-003",
+    "name": "Sara Nyström",
+    "age": 45,
+    "risk_tolerance": "medium",
+    "investment_horizon_years": 2,
+    "annual_income_sek": 560000
+  },
+  {
+    "customer_id": "CUST-004",
+    "name": "Johan Berglund",
+    "age": 40,
+    "risk_tolerance": "medium",
+    "investment_horizon_years": null,
+    "annual_income_sek": 480000
+  },
+  {
+    "customer_id": "CUST-005",
+    "name": "Maja Ekström",
+    "age": 23,
+    "risk_tolerance": "high",
+    "investment_horizon_years": 15,
+    "annual_income_sek": 310000
+  }
+]

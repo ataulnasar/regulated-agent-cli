@@ -122,6 +122,8 @@ class Product(DomainModel):
     name: Annotated[str, StringConstraints(min_length=1)]
     risk_level: RiskLevel
     min_horizon_years: Annotated[int, Field(ge=0, le=50)]
+    # MiFID II distinguishes complex products (e.g. leveraged trackers) with stricter rules.
+    is_complex: bool = False
     description: str
     source_id: Citation
 
