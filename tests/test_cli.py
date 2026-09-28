@@ -10,9 +10,12 @@ def test_assess_echoes_input_and_received_status() -> None:
         app,
         [
             "assess",
-            "--customer", "CUST-001",
-            "--advisor", "ADV-01",
-            "--request", "I want a low-risk investment for retirement",
+            "--customer",
+            "CUST-001",
+            "--advisor",
+            "ADV-01",
+            "--request",
+            "I want a low-risk investment for retirement",
         ],
     )
 

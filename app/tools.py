@@ -153,10 +153,7 @@ class ToolSpec:
 
 
 def _summarise_customer(view: ModelCustomerView) -> str:
-    return (
-        f"{view.customer_ref} risk={view.risk_tolerance} "
-        f"horizon={view.investment_horizon_years}"
-    )
+    return f"{view.customer_ref} risk={view.risk_tolerance} horizon={view.investment_horizon_years}"
 
 
 def _summarise_products(products: list[Product]) -> str:
